@@ -17,7 +17,7 @@ bl_info = {
     "description" : "Sets camera to autofocus on nearest surface.",
     "blender" : (3, 3, 1),
     "version" : (0, 4, 0),
-    "doc_url": "https://shardsofred.gumroad.com/",
+    "doc_url": "https://github.com/hrkck/Autofocus_Modern/tree/main",
     "warning" : "Smooth function does not work yet, contibutions are welcome!",
     "location": "Properties > Data ",
     "category": "Object",
