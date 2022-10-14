@@ -58,7 +58,7 @@ def register():
                                     type=AutoFocus_Scene_Properties
                                     )
     bpy.app.handlers.depsgraph_update_post.append(scene_update)
-    
+    bpy.app.handlers.frame_change_post.append(scene_update)
 
 def unregister():    
     bpy.utils.unregister_class(AutoFocus_Panel)
@@ -66,6 +66,7 @@ def unregister():
     bpy.utils.unregister_class(AutoFocus_Active_Camera)
     bpy.utils.unregister_class(AutoFocus_Scene_Properties)
     bpy.app.handlers.depsgraph_update_post.remove(scene_update)
+    bpy.app.handlers.frame_change_post.remove(scene_update)
     del bpy.types.Camera.autofocus
     del bpy.types.Scene.autofocus_properties
 
