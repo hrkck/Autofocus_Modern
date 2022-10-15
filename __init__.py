@@ -18,7 +18,7 @@ bl_info = {
     "blender" : (3, 3, 1),
     "version" : (0, 4, 1),
     "doc_url": "https://github.com/hrkck/Autofocus_Modern/tree/main",
-    "warning" : "Smooth function does not work yet, contibutions are welcome!",
+    "warning" : "Timer does not work yet, some features not implemented, contributions are welcome",
     "location": "Properties > Data ",
     "category": "Object",
 }
@@ -46,7 +46,9 @@ import time
 
 from . autofocus_modern import *
 
-def register():
+
+    
+def register():    
     bpy.utils.register_class(AutoFocus_Panel)
     bpy.utils.register_class(AutoFocus_Properties)
     bpy.utils.register_class(AutoFocus_Active_Camera)
@@ -59,7 +61,7 @@ def register():
                                     )
     bpy.app.handlers.depsgraph_update_post.append(scene_update)
     bpy.app.handlers.frame_change_post.append(scene_update)
-    bpy.app.timers.register(functools.partial(run_24_times))
+    bpy.app.timers.register(run_24_times)
 
 def unregister():    
     bpy.utils.unregister_class(AutoFocus_Panel)
@@ -68,10 +70,13 @@ def unregister():
     bpy.utils.unregister_class(AutoFocus_Scene_Properties)
     bpy.app.handlers.depsgraph_update_post.remove(scene_update)
     bpy.app.handlers.frame_change_post.remove(scene_update)
-    bpy.app.timers.unregister(run_24_times)
+    if bpy.app.timers.is_registered(run_24_times):
+        bpy.app.timers.unregister(run_24_times)
     del bpy.types.Camera.autofocus
     del bpy.types.Scene.autofocus_properties
 
 if __name__ == "__main__":
+    register()
+    unregister()
     register()
     pass

@@ -39,6 +39,9 @@ import time
 
 last_time = time.time()
 elapsed = 0.0
+
+global_frame_counter = 0
+lerp_locations = {}
         
 def create_target(cam):
     if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
@@ -87,7 +90,6 @@ def create_smooth_target(cam):
     
     cam.data.dof.focus_object = smooth
 
-    
 def remove_smooth_target(cam):
     target = cam.data.autofocus.target
     cam.data.dof.focus_object = target
@@ -112,20 +114,19 @@ def find_cam(scn, af):
         if(obj.type=='CAMERA' and obj.data.autofocus != None
         and obj.data.autofocus == af):
             return obj
-        
     return None
         
 def set_enabled(self, value):
     self["enabled"] = value
     scn = bpy.context.scene
-    cam = find_cam(scn, self)
+    cam = bpy.context.object #find_cam(scn, self)
     if value:
         uid = cam.name + str(time.time())
         cam.data.autofocus.uid = uid
         a_cam = scn.autofocus_properties.active_cameras.add()
         a_cam.camera = cam
         a_cam.name = uid
-        create_target(cam)
+        create_target(cam) 
         reset_clock()
     else:
         i = scn.autofocus_properties.active_cameras.find(cam.data.autofocus.uid)
@@ -142,7 +143,7 @@ def get_enabled(self):
 def set_smooth_enabled(self, value):
     self["smooth"] = value
     scn = bpy.context.scene
-    cam = find_cam(scn, self)
+    cam = bpy.context.object # find_cam(scn, self)
     if value:
         create_smooth_target(cam)
     else:
@@ -157,7 +158,7 @@ def get_smooth_enabled(self):
 def set_smooth_offset(self, value):
     self["smooth_offset"] = value
     scn = bpy.context.scene
-    cam = find_cam(scn, self)
+    cam = bpy.context.object # find_cam(scn, self)
     # cam.data.autofocus.target.children[0].slow_parent_offset = value
     
 def get_smooth_offset(self):
@@ -287,25 +288,20 @@ class AutoFocus_Panel(Panel):
 def scene_update(scn, depsgraph):
     if scn.autofocus_properties.rate_enabled and not check_clock(scn):
         return
+    
+    if not bpy.app.timers.is_registered(run_24_times):
+        bpy.app.timers.register(run_24_times)
 
     for c in scn.autofocus_properties.active_cameras:
         try:
-            cam = c['camera']
+            cam = c.camera
+            af = cam.data.autofocus
         except Exception:
-            print("cam not found skipping")
             continue
-
-        #Set the position of the target empties.
-        af = cam.data.autofocus
-        
-        print(cam.data.name)
-        
-        if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
-            print("This object exists!!!!")
 
         if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
             cam.data.autofocus.target = None
-            cam.data.dof.focus_object = None
+            cam.data.dof.focrrus_object = None
             scn.autofocus.enabled = False
             bpy.context.object.data.autofocus.enabled = False
             return    
@@ -329,8 +325,6 @@ def scene_update(scn, depsgraph):
 
         result, location, normal, index, object, matrix = scn.ray_cast(depsgraph, org, dir)
         
-        
-        
         if result:
             new_loc = cam.matrix_world.inverted() @ location
             
@@ -340,21 +334,14 @@ def scene_update(scn, depsgraph):
             if isPosEqual(tgt_loc, new_loc): lerp_locations[cam.data.name] = [new_loc, False, lerp_locations[cam.data.name][2]]
             else: lerp_locations[cam.data.name] = [new_loc, True, af_smooth_loc]
             
-            
             tgt_loc.x = new_loc.x
             tgt_loc.y = new_loc.y            
-            tgt_loc.z = new_loc.z
-            
-            # af_smooth_loc = tgt_loc.lerp(new_loc, global_frame_counter/24)
-            
+            tgt_loc.z = new_loc.z            
             
         if tgt_loc.z * -1 > af.max:
             tgt_loc.z = af.max * -1
         if tgt_loc.z * -1 < af.min:
             tgt_loc.z = af.min * -1
-
-global_frame_counter = 0
-lerp_locations = {}
 
 @persistent
 def run_24_times():
@@ -365,20 +352,23 @@ def run_24_times():
         global_frame_counter = 0
         
     if bpy.context.scene.autofocus_properties.rate_enabled and not check_clock(bpy.context.scene):
-        return
+        return 0.041
 
+    c1 = 0
     for c in bpy.context.scene.autofocus_properties.active_cameras:
         try:
-            cam = c['camera']
-        except Exception:
-            print("cam not found skipping")
+            c1 += 1
+            cam = c.camera
+            af = cam.data.autofocus
+        except Exception as e:
+            # print(e)
+            # print(c1)
+            # print("error with cam")
             continue
         
         global lerp_locations
         if cam.data.name not in lerp_locations: continue 
-        
-        af = cam.data.autofocus
-        
+                
         # if target object DOES NOT HAVE any children (smooth_target) then skip 
         if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects: continue
         
@@ -389,9 +379,10 @@ def run_24_times():
         isDestChanged = lerp_locations[cam.data.name][1]
         initial_loc = af_smooth_loc # update below 
         
+        # if current smooth pos not equal lerp_dest, 
+        # then get initial_loc and reset global frame counter
         if not isPosEqual(af_smooth_loc, lerp_dest) and isDestChanged:
             initial_loc = lerp_locations[cam.data.name][2]
-            
             global_frame_counter = 1
         
         step_destination = initial_loc.lerp(lerp_dest, global_frame_counter / 46)
@@ -399,7 +390,6 @@ def run_24_times():
         af_smooth_loc.x = step_destination.x
         af_smooth_loc.y = step_destination.y  
         af_smooth_loc.z = step_destination.z
-        
         
     return 0.041
 
