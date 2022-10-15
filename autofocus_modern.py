@@ -301,7 +301,7 @@ def scene_update(scn, depsgraph):
 
         if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
             cam.data.autofocus.target = None
-            cam.data.dof.focrrus_object = None
+            cam.data.dof.focus_object = None
             scn.autofocus.enabled = False
             bpy.context.object.data.autofocus.enabled = False
             return    
@@ -354,16 +354,11 @@ def run_24_times():
     if bpy.context.scene.autofocus_properties.rate_enabled and not check_clock(bpy.context.scene):
         return 0.041
 
-    c1 = 0
     for c in bpy.context.scene.autofocus_properties.active_cameras:
         try:
-            c1 += 1
             cam = c.camera
             af = cam.data.autofocus
-        except Exception as e:
-            # print(e)
-            # print(c1)
-            # print("error with cam")
+        except Exception:
             continue
         
         global lerp_locations
