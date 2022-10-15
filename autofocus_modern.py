@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import bpy
 
 import math
+import mathutils
 
 from bpy.props import (
     FloatProperty,
@@ -70,6 +71,7 @@ def remove_target(cam):
     bpy.ops.object.select_all(action='DESELECT')
     target.select_set(True)
     bpy.ops.object.delete()
+    cam.select_set(True)
     
 def create_smooth_target(cam):
     target = cam.data.autofocus.target
@@ -80,26 +82,30 @@ def create_smooth_target(cam):
     smooth.empty_display_size = 1
     smooth.empty_display_type = "CIRCLE"
     smooth.rotation_euler.x = math.radians(90)
-    smooth.parent = target
-    # smooth.use_slow_parent = True
-    # smooth.slow_parent_offset = cam.data.autofocus.smooth_offset
+    # smooth.matrix_parent_inverse = target.matrix_world.inverted()
+    smooth.parent = cam
     
     cam.data.dof.focus_object = smooth
 
     
 def remove_smooth_target(cam):
     target = cam.data.autofocus.target
-    smooth = target.children[0]
     cam.data.dof.focus_object = target
-    # smooth.use_slow_parent = False
-    # smooth.parent = None
     
+    global lerp_locations
+    # delete old and new lerp_locations for the cam:
+    if cam.data.name in lerp_locations:
+        del lerp_locations[cam.data.name]
+    
+    if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects:
+        return
+    
+    smooth = bpy.data.objects["AutoFocus_Smooth_Target_" + cam.name]
     # Deselect all
     bpy.ops.object.select_all(action='DESELECT')
     smooth.select_set(True)
     bpy.ops.object.delete()
-    # objs = bpy.data.objects
-    # objs.remove(objs[smooth.name])
+    cam.select_set(True)
     
 def find_cam(scn, af):
     for obj in scn.objects:
@@ -152,7 +158,7 @@ def set_smooth_offset(self, value):
     self["smooth_offset"] = value
     scn = bpy.context.scene
     cam = find_cam(scn, self)
-    cam.data.autofocus.target.children[0].slow_parent_offset = value
+    # cam.data.autofocus.target.children[0].slow_parent_offset = value
     
 def get_smooth_offset(self):
     if self.get("smooth_offset") == None:
@@ -284,21 +290,33 @@ def scene_update(scn, depsgraph):
 
     for c in scn.autofocus_properties.active_cameras:
         try:
-            _ = c['camera']
+            cam = c['camera']
         except Exception:
-            print("cam not found going on")
+            print("cam not found skipping")
             continue
-        cam = c['camera']
 
         #Set the position of the target empties.
         af = cam.data.autofocus
+        
+        print(cam.data.name)
+        
+        if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
+            print("This object exists!!!!")
+
+        if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
+            cam.data.autofocus.target = None
+            cam.data.dof.focus_object = None
+            scn.autofocus.enabled = False
+            bpy.context.object.data.autofocus.enabled = False
+            return    
+        
         tgt_loc = af.target.location
         
-        print(f"length of children {[obj for obj in bpy.data.objects if obj.parent == af.target]}")
-        if len([obj for obj in bpy.data.objects if obj.parent == af.target]) == 0: pass
+        af_smooth_loc = Vector([0,0,0])
+        if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects: pass
         else:
-            afs = af.target.children[0]
-            afs_loc = afs.location
+            af_smooth = bpy.data.objects["AutoFocus_Smooth_Target_" + cam.name]
+            af_smooth_loc = af_smooth.location
         
                 
         if af.max <= af.min:
@@ -311,19 +329,83 @@ def scene_update(scn, depsgraph):
 
         result, location, normal, index, object, matrix = scn.ray_cast(depsgraph, org, dir)
         
+        
+        
         if result:
             new_loc = cam.matrix_world.inverted() @ location
+            
+            # save old and new locatgions:
+            global lerp_locations
+            lerp_locations[cam.data.name] = [None,None,None]
+            if isPosEqual(tgt_loc, new_loc): lerp_locations[cam.data.name] = [new_loc, False, lerp_locations[cam.data.name][2]]
+            else: lerp_locations[cam.data.name] = [new_loc, True, af_smooth_loc]
+            
             
             tgt_loc.x = new_loc.x
             tgt_loc.y = new_loc.y            
             tgt_loc.z = new_loc.z
+            
+            # af_smooth_loc = tgt_loc.lerp(new_loc, global_frame_counter/24)
             
             
         if tgt_loc.z * -1 > af.max:
             tgt_loc.z = af.max * -1
         if tgt_loc.z * -1 < af.min:
             tgt_loc.z = af.min * -1
+
+global_frame_counter = 0
+lerp_locations = {}
+
+@persistent
+def run_24_times():
+    global global_frame_counter
+    global_frame_counter += 1
+    
+    if global_frame_counter == 47:
+        global_frame_counter = 0
         
+    if bpy.context.scene.autofocus_properties.rate_enabled and not check_clock(bpy.context.scene):
+        return
+
+    for c in bpy.context.scene.autofocus_properties.active_cameras:
+        try:
+            cam = c['camera']
+        except Exception:
+            print("cam not found skipping")
+            continue
+        
+        global lerp_locations
+        if cam.data.name not in lerp_locations: continue 
+        
+        af = cam.data.autofocus
+        
+        # if target object DOES NOT HAVE any children (smooth_target) then skip 
+        if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects: continue
+        
+        af_smooth = bpy.data.objects["AutoFocus_Smooth_Target_" + cam.name]
+        af_smooth_loc = af_smooth.location
+        
+        lerp_dest = lerp_locations[cam.data.name][0]
+        isDestChanged = lerp_locations[cam.data.name][1]
+        initial_loc = af_smooth_loc # update below 
+        
+        if not isPosEqual(af_smooth_loc, lerp_dest) and isDestChanged:
+            initial_loc = lerp_locations[cam.data.name][2]
+            
+            global_frame_counter = 1
+        
+        step_destination = initial_loc.lerp(lerp_dest, global_frame_counter / 46)
+
+        af_smooth_loc.x = step_destination.x
+        af_smooth_loc.y = step_destination.y  
+        af_smooth_loc.z = step_destination.z
+        
+        
+    return 0.041
+
+def isPosEqual(pos1, pos2):
+    return pos1.x == pos2.x and pos1.y == pos2.y and pos1.z == pos2.z
+
 def check_clock(scn):
     global last_time
     global elapsed

@@ -16,7 +16,7 @@ bl_info = {
     "author" : "Hakki R Kucuk, Leigh Harborne, ",
     "description" : "Sets camera to autofocus on nearest surface.",
     "blender" : (3, 3, 1),
-    "version" : (0, 4, 0),
+    "version" : (0, 4, 1),
     "doc_url": "https://github.com/hrkck/Autofocus_Modern/tree/main",
     "warning" : "Smooth function does not work yet, contibutions are welcome!",
     "location": "Properties > Data ",
@@ -41,7 +41,7 @@ from bpy.types import (
 
 from bpy.app.handlers import persistent
 from mathutils import Vector
-
+import functools
 import time
 
 from . autofocus_modern import *
@@ -59,6 +59,7 @@ def register():
                                     )
     bpy.app.handlers.depsgraph_update_post.append(scene_update)
     bpy.app.handlers.frame_change_post.append(scene_update)
+    bpy.app.timers.register(functools.partial(run_24_times))
 
 def unregister():    
     bpy.utils.unregister_class(AutoFocus_Panel)
@@ -67,6 +68,7 @@ def unregister():
     bpy.utils.unregister_class(AutoFocus_Scene_Properties)
     bpy.app.handlers.depsgraph_update_post.remove(scene_update)
     bpy.app.handlers.frame_change_post.remove(scene_update)
+    bpy.app.timers.unregister(run_24_times)
     del bpy.types.Camera.autofocus
     del bpy.types.Scene.autofocus_properties
 
