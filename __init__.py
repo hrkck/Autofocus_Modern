@@ -16,7 +16,7 @@ bl_info = {
     "author" : "Hakki R Kucuk, Leigh Harborne, ",
     "description" : "Sets camera to autofocus on nearest surface.",
     "blender" : (3, 3, 1),
-    "version" : (0, 4, 1),
+    "version" : (0, 5, 1),
     "doc_url": "https://github.com/hrkck/Autofocus_Modern/tree/main",
     "warning" : "Timer does not work yet, some features not implemented, contributions are welcome",
     "location": "Properties > Data ",

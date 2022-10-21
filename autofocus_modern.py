@@ -13,17 +13,12 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 '''
 
-
-
 import bpy
-
-import math
-import mathutils
+import bl_math
 
 from bpy.props import (
     FloatProperty,
     BoolProperty,
-    PointerProperty,
     CollectionProperty,
     StringProperty,
     )
@@ -43,71 +38,6 @@ elapsed = 0.0
 global_frame_counter = 0
 lerp_locations = {}
         
-def create_target(cam):
-    if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
-        target = bpy.data.objects.new("AutoFocus_Target_" + cam.name, None)
-        bpy.context.object.users_collection[0].objects.link( target )
-    
-    target.empty_display_size = 1
-    target.empty_display_type = "ARROWS"
-    target.parent = cam
-    cam.data.autofocus.target = target
-    cam.data.dof.focus_object = target
-    
-def remove_target(cam):
-    # if the camera is duplicated, the dupli camera steals the autofocus object, so lets prevent that:
-    if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
-        cam.data.autofocus.target = None
-        cam.data.dof.focus_object = None
-        return
-    
-    target = cam.data.autofocus.target
-    
-    if cam.data.autofocus.smooth:
-        remove_smooth_target(cam)
-    
-    cam.data.autofocus.target = None
-    cam.data.dof.focus_object = None
-    target.parent = None
-    
-    # Deselect all
-    bpy.ops.object.select_all(action='DESELECT')
-    target.select_set(True)
-    bpy.ops.object.delete()
-    cam.select_set(True)
-    
-def create_smooth_target(cam):
-    target = cam.data.autofocus.target
-    if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects:
-        smooth = bpy.data.objects.new("AutoFocus_Smooth_Target_" + cam.name, None)
-        bpy.context.object.users_collection[0].objects.link( smooth )
-        
-    smooth.empty_display_size = 1
-    smooth.empty_display_type = "CIRCLE"
-    smooth.rotation_euler.x = math.radians(90)
-    # smooth.matrix_parent_inverse = target.matrix_world.inverted()
-    smooth.parent = cam
-    
-    cam.data.dof.focus_object = smooth
-
-def remove_smooth_target(cam):
-    target = cam.data.autofocus.target
-    cam.data.dof.focus_object = target
-    
-    global lerp_locations
-    # delete old and new lerp_locations for the cam:
-    if cam.data.name in lerp_locations:
-        del lerp_locations[cam.data.name]
-    
-    if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects:
-        return
-    
-    smooth = bpy.data.objects["AutoFocus_Smooth_Target_" + cam.name]
-    # Deselect all
-    bpy.ops.object.select_all(action='DESELECT')
-    smooth.select_set(True)
-    bpy.ops.object.delete()
-    cam.select_set(True)
     
 def find_cam(scn, af):
     for obj in scn.objects:
@@ -126,12 +56,10 @@ def set_enabled(self, value):
         a_cam = scn.autofocus_properties.active_cameras.add()
         a_cam.camera = cam
         a_cam.name = uid
-        create_target(cam) 
         reset_clock()
     else:
         i = scn.autofocus_properties.active_cameras.find(cam.data.autofocus.uid)
         scn.autofocus_properties.active_cameras.remove(i)
-        remove_target(cam)
         cam.data.autofocus.smooth = False
     
 def get_enabled(self):
@@ -142,12 +70,6 @@ def get_enabled(self):
     
 def set_smooth_enabled(self, value):
     self["smooth"] = value
-    scn = bpy.context.scene
-    cam = bpy.context.object # find_cam(scn, self)
-    if value:
-        create_smooth_target(cam)
-    else:
-        remove_smooth_target(cam)
     
 def get_smooth_enabled(self):
     if self.get("smooth") == None:
@@ -157,9 +79,6 @@ def get_smooth_enabled(self):
     
 def set_smooth_offset(self, value):
     self["smooth_offset"] = value
-    scn = bpy.context.scene
-    cam = bpy.context.object # find_cam(scn, self)
-    # cam.data.autofocus.target.children[0].slow_parent_offset = value
     
 def get_smooth_offset(self):
     if self.get("smooth_offset") == None:
@@ -215,11 +134,6 @@ class AutoFocus_Properties(PropertyGroup):
         name="UID",
         default="",
         description="Unique Identifier"
-        )
-    target: PointerProperty(
-        type=bpy.types.Object,
-        name="Focus Target",
-        description="The object which will be used for DoF focus."
         )
         
 class AutoFocus_Active_Camera(PropertyGroup):
@@ -289,9 +203,6 @@ def scene_update(scn, depsgraph):
     if scn.autofocus_properties.rate_enabled and not check_clock(scn):
         return
     
-    if not bpy.app.timers.is_registered(run_24_times):
-        bpy.app.timers.register(run_24_times)
-
     for c in scn.autofocus_properties.active_cameras:
         try:
             cam = c.camera
@@ -299,24 +210,8 @@ def scene_update(scn, depsgraph):
         except Exception:
             continue
 
-        if "AutoFocus_Target_" + cam.name not in bpy.data.objects:
-            cam.data.autofocus.target = None
-            cam.data.dof.focus_object = None
-            scn.autofocus.enabled = False
-            bpy.context.object.data.autofocus.enabled = False
-            return    
-        
-        tgt_loc = af.target.location
-        
-        af_smooth_loc = Vector([0,0,0])
-        if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects: pass
-        else:
-            af_smooth = bpy.data.objects["AutoFocus_Smooth_Target_" + cam.name]
-            af_smooth_loc = af_smooth.location
-        
-                
-        if af.max <= af.min:
-            af.max = af.min + 0.01
+        # if af.max <= af.min:
+        #     af.max = af.min + 0.01
         
         cam_matrix = cam.matrix_world
         org = cam_matrix @ Vector((0.0, 0.0, af.min * -1))
@@ -326,29 +221,39 @@ def scene_update(scn, depsgraph):
         result, location, normal, index, object, matrix = scn.ray_cast(depsgraph, org, dir)
         
         if result:
-            new_loc = cam.matrix_world.inverted() @ location
+            # archaic code
+            # new_loc = cam.matrix_world.inverted() @ location
             
+            current_dist = cam.data.dof.focus_distance
+            new_dist_vector = cam.location - location
+            new_dist = new_dist_vector.length
+                
             # save old and new locatgions:
             global lerp_locations
             lerp_locations[cam.data.name] = [None,None,None]
-            if isPosEqual(tgt_loc, new_loc): lerp_locations[cam.data.name] = [new_loc, False, lerp_locations[cam.data.name][2]]
-            else: lerp_locations[cam.data.name] = [new_loc, True, af_smooth_loc]
+            if abs(current_dist - new_dist) < 0.01: 
+                lerp_locations[cam.data.name] = [new_dist, False, lerp_locations[cam.data.name][2]]
+                if bpy.app.timers.is_registered(run_24_times):
+                    bpy.app.timers.unregister(run_24_times)
+            else:
+                lerp_locations[cam.data.name] = [new_dist, True, current_dist]
+                if not bpy.app.timers.is_registered(run_24_times) and cam.data.autofocus.smooth:
+                    bpy.app.timers.register(run_24_times)
+                
+            if not cam.data.autofocus.smooth: 
+                cam.data.dof.focus_distance = new_dist
             
-            tgt_loc.x = new_loc.x
-            tgt_loc.y = new_loc.y            
-            tgt_loc.z = new_loc.z            
-            
-        if tgt_loc.z * -1 > af.max:
-            tgt_loc.z = af.max * -1
-        if tgt_loc.z * -1 < af.min:
-            tgt_loc.z = af.min * -1
+        # if tgt_loc.z * -1 > af.max:
+        #     tgt_loc.z = af.max * -1
+        # if tgt_loc.z * -1 < af.min:
+        #     tgt_loc.z = af.min * -1
 
 @persistent
 def run_24_times():
     global global_frame_counter
     global_frame_counter += 1
     
-    if global_frame_counter == 47:
+    if global_frame_counter == 23:
         global_frame_counter = 0
         
     if bpy.context.scene.autofocus_properties.rate_enabled and not check_clock(bpy.context.scene):
@@ -357,39 +262,35 @@ def run_24_times():
     for c in bpy.context.scene.autofocus_properties.active_cameras:
         try:
             cam = c.camera
-            af = cam.data.autofocus
         except Exception:
             continue
         
         global lerp_locations
         if cam.data.name not in lerp_locations: continue 
                 
-        # if target object DOES NOT HAVE any children (smooth_target) then skip 
-        if "AutoFocus_Smooth_Target_" + cam.name not in bpy.data.objects: continue
-        
-        af_smooth = bpy.data.objects["AutoFocus_Smooth_Target_" + cam.name]
-        af_smooth_loc = af_smooth.location
+        foc_dist = cam.data.dof.focus_distance
         
         lerp_dest = lerp_locations[cam.data.name][0]
         isDestChanged = lerp_locations[cam.data.name][1]
-        initial_loc = af_smooth_loc # update below 
+        current_dist = foc_dist # update below 
         
-        # if current smooth pos not equal lerp_dest, 
+        # if current smooth foc_dist not equal lerp_dest, 
         # then get initial_loc and reset global frame counter
-        if not isPosEqual(af_smooth_loc, lerp_dest) and isDestChanged:
-            initial_loc = lerp_locations[cam.data.name][2]
+        if not abs(foc_dist - lerp_dest) < 0.01 and isDestChanged:
+            current_dist = lerp_locations[cam.data.name][2]
             global_frame_counter = 1
         
-        step_destination = initial_loc.lerp(lerp_dest, global_frame_counter / 46)
+        step_destination = bl_math.lerp(current_dist, lerp_dest, global_frame_counter / 23) 
 
-        af_smooth_loc.x = step_destination.x
-        af_smooth_loc.y = step_destination.y  
-        af_smooth_loc.z = step_destination.z
-        
+        cam.data.dof.focus_distance = step_destination
     return 0.041
+
 
 def isPosEqual(pos1, pos2):
     return pos1.x == pos2.x and pos1.y == pos2.y and pos1.z == pos2.z
+
+def isDistEqual(dist1, dist2):
+    return dist1 == dist2
 
 def check_clock(scn):
     global last_time
