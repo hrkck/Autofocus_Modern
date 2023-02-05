@@ -15,8 +15,8 @@ bl_info = {
     "name" : "Autofocus_Modern",
     "author" : "Hakki R Kucuk, Leigh Harborne, ",
     "description" : "Sets camera to autofocus on nearest surface.",
-    "blender" : (3, 3, 1),
-    "version" : (0, 5, 1),
+    "blender" : (3, 4, 1),
+    "version" : (0, 5, 2),
     "doc_url": "https://github.com/hrkck/Autofocus_Modern/tree/main",
     "warning" : "Timer does not work yet, some features not implemented, contributions are welcome",
     "location": "Properties > Data ",
@@ -62,6 +62,7 @@ def register():
     bpy.app.handlers.depsgraph_update_post.append(scene_update)
     bpy.app.handlers.frame_change_post.append(scene_update)
     bpy.app.timers.register(run_24_times)
+    
 
 def unregister():    
     bpy.utils.unregister_class(AutoFocus_Panel)

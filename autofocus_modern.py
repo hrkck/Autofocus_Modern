@@ -64,7 +64,6 @@ def set_enabled(self, value):
         reset_clock()
     else:
         i = scn.autofocus_properties.active_cameras.find(cam.data.autofocus.uid)
-        print(f"number found {i}")
         scn.autofocus_properties.active_cameras.remove(i)
         # cam.data.autofocus.smooth = False
         try:
@@ -187,7 +186,8 @@ class AutoFocus_Panel(Panel):
         split = layout.split()
         split.prop(context.scene.autofocus_properties, "rate_enabled")
         split.prop(context.scene.autofocus_properties, "rate_seconds")
-    
+
+        
 @persistent
 def scene_update(scn, depsgraph):
     if scn.autofocus_properties.rate_enabled and not check_clock(scn):
@@ -218,15 +218,21 @@ def scene_update(scn, depsgraph):
                 if cam.data.autofocus.smooth:
                     global lerp_locations # get lerp locs for smooth
                     
+                    i = scn.autofocus_properties.active_cameras.find(cam.data.autofocus.uid)
+        
                     if cam.data.autofocus.uid not in lerp_locations:
                         lerp_locations[cam.data.autofocus.uid] = [0, True, 0, 1]
-            
+                        
+                    
                     if isDistAlmostEqual(current_dist, new_dist):
                         lerp_locations[cam.data.autofocus.uid] = [new_dist, True, current_dist, 1]
                     else:
-                        lerp_locations[cam.data.autofocus.uid] = [new_dist, False, lerp_locations[cam.data.autofocus.uid][2], lerp_locations[cam.data.autofocus.uid][3]]
+                        lerp_locations[cam.data.autofocus.uid] = [new_dist, False, lerp_locations[cam.data.autofocus.uid][2], 1 ]
+
+                    if not bpy.app.timers.is_registered(run_24_times):
+                        bpy.app.timers.register(run_24_times)
                 else:
-                    print("setting dist")
+                    # print("setting dist")
                     cam.data.dof.focus_distance = new_dist
             
 
@@ -239,35 +245,26 @@ def run_24_times():
     for n, cam in enumerate(bpy.context.scene.autofocus_properties.active_cameras):
         if cam.camera.type != "CAMERA": continue
         cam = cam.camera
-        # try:
-        #     # print(n)
-        #     # cam = c.camera
-        #     # print(cam.data.autofocus.uid)
-        # except Exception:
-        #     print('cam not found')
-        #     continue
         
-        global lerp_locations
-        print(lerp_locations)
         if cam.data.autofocus.uid not in lerp_locations or not cam.data.autofocus.smooth: 
-            # print('continuing')
+            print('continuing')  
             continue
-        # if not any(lerp_locations[cam.data.autofocus.uid]): continue
         
-        offset = cam.data.autofocus.smooth_offset
+        offset = cam.data.autofocus.smooth_offset 
+        offset = offset if offset else 24
         
         if lerp_locations[cam.data.autofocus.uid][3] >= offset:
             lerp_locations[cam.data.autofocus.uid][3] = 0
         else:
             if lerp_locations[cam.data.autofocus.uid][3] == None:
                 lerp_locations[cam.data.autofocus.uid][3] = 1
-            else:
+                
+            else:  
                 lerp_locations[cam.data.autofocus.uid][3] += 1
         
             
         foc_dist = cam.data.dof.focus_distance
         
-        # print(lerp_locations[cam.data.autofocus.uid])
         lerp_dest = lerp_locations[cam.data.autofocus.uid][0]
         isDestSame = lerp_locations[cam.data.autofocus.uid][1]
         current_dist = foc_dist
@@ -279,7 +276,7 @@ def run_24_times():
         # then get initial_loc and reset global frame counter
         if not abs(foc_dist - lerp_dest) < 0.01 and isDestSame:
             lerp_locations[cam.data.autofocus.uid][3] = 1
-    
+
         step_destination = bl_math.lerp(current_dist, lerp_dest, lerp_locations[cam.data.autofocus.uid][3] / offset) 
 
         cam.data.dof.focus_distance = step_destination
