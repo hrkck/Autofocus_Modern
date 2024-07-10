@@ -5,9 +5,9 @@ Currently works:
 + Autofocus nearest object
 + Smooth follow autofocus
 + Custom control of smooth follow speed or interpolation
-+ Timer for delay and performance improvements
 
 Currently does not work:
+- Timer for delay and performance improvements
 - Any suggestions?
 
 My Gumroad page: https://shardsofred.gumroad.com/
